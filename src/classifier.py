@@ -1,3 +1,9 @@
+import os
+
+from dotenv import load_dotenv
+from google import genai
+from pydantic import ValidationError
+
 from src.models import (
     Category,
     IssueClassification,
@@ -56,3 +62,87 @@ def classify_issue_mock(issue: PreprocessedIssue) -> IssueClassification:
         needs_human=needs_human,
         recommended_route=route,
     )
+
+
+def build_classifier_prompt(issue: PreprocessedIssue) -> str:
+    return f"""
+You are an issue triage agent inside a deterministic workflow.
+
+Classify the following GitHub issue.
+
+Allowed category values:
+- bug
+- feature
+- question
+- security
+- unclear
+
+Allowed urgency values:
+- low
+- medium
+- high
+
+Allowed sentiment values:
+- neutral
+- frustrated
+- angry
+
+Allowed recommended_route values:
+- security_review
+- human_review
+- ask_more_info
+- backlog
+
+Routing guidance:
+- Security issues must go to security_review.
+- Angry or risky issues should go to human_review.
+- Bugs missing reproduction steps, expected behavior, or actual behavior should go to ask_more_info.
+- Clear non-urgent issues should go to backlog.
+
+Issue title:
+{issue.title}
+
+Issue body:
+{issue.body}
+
+Preprocessing facts:
+- has_reproduction_steps: {issue.has_reproduction_steps}
+- has_expected_behavior: {issue.has_expected_behavior}
+- has_actual_behavior: {issue.has_actual_behavior}
+""".strip()
+
+
+def classify_issue_with_gemini(issue: PreprocessedIssue) -> IssueClassification:
+    load_dotenv()
+
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    client = genai.Client()
+
+    response = client.models.generate_content(
+        model=model,
+        contents=build_classifier_prompt(issue),
+        config={
+            "response_format": {
+                "text": {
+                    "mime_type": "application/json",
+                    "schema": IssueClassification.model_json_schema(),
+                }
+            }
+        },
+    )
+
+    return IssueClassification.model_validate_json(response.text)
+
+
+def classify_issue(issue: PreprocessedIssue) -> IssueClassification:
+    load_dotenv()
+
+    if not os.getenv("GEMINI_API_KEY"):
+        return classify_issue_mock(issue)
+
+    try:
+        return classify_issue_with_gemini(issue)
+    except (ValidationError, ValueError, RuntimeError) as exc:
+        print(f"agent_classifier_failed: {exc}")
+        print("falling_back_to_mock_classifier")
+        return classify_issue_mock(issue)
