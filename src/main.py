@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 from src.models import RawIssue
@@ -9,8 +10,11 @@ def main() -> None:
     sample_path = Path("examples/sample_issues.json")
     issues = json.loads(sample_path.read_text())
 
+    max_samples = int(os.getenv("MAX_SAMPLE_ISSUES", str(len(issues))))
+    issues = issues[:max_samples]
+
     for index, item in enumerate(issues, start=1):
-        print(f"\\n=== Sample issue #{index}: {item['title']} ===")
+        print(f"\n=== Sample issue #{index}: {item['title']} ===")
 
         issue = RawIssue(**item)
 

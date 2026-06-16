@@ -1,0 +1,18 @@
+
+=== Sample issue #1: Upload crashes on large files ===
+executor_completed: preprocess_issue
+executor_completed: classify_issue_agent
+executor_completed: route_issue
+output
+{
+  "route": "human_review",
+  "reason": "The issue requires human review due to risk or user sentiment.",
+  "classification": {
+    "category": "bug",
+    "urgency": "medium",
+    "sentiment": "neutral",
+    "missing_info": [],
+    "needs_human": true,
+    "recommended_route": "human_review"
+  }
+}

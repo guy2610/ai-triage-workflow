@@ -1,4 +1,5 @@
 import os
+import time
 
 from dotenv import load_dotenv
 from google import genai
@@ -68,7 +69,7 @@ def build_classifier_prompt(issue: PreprocessedIssue) -> str:
     return f"""
 You are an issue triage agent inside a deterministic workflow.
 
-Classify the following GitHub issue.
+Classify the following GitHub issue and return only valid JSON matching the schema.
 
 Allowed category values:
 - bug
@@ -95,9 +96,12 @@ Allowed recommended_route values:
 
 Routing guidance:
 - Security issues must go to security_review.
-- Angry or risky issues should go to human_review.
-- Bugs missing reproduction steps, expected behavior, or actual behavior should go to ask_more_info.
+- Angry, high-urgency, or risky issues should go to human_review.
+- Bugs missing reproduction steps, expected behavior, or actual behavior should go to ask_more_info only when they are not high urgency and do not require human review.
 - Clear non-urgent issues should go to backlog.
+- Keep needs_human and recommended_route consistent:
+  - if needs_human is true and the issue is not security-related, recommended_route should be human_review.
+  - if recommended_route is ask_more_info, needs_human should usually be false.
 
 Issue title:
 {issue.title}
@@ -118,17 +122,28 @@ def classify_issue_with_gemini(issue: PreprocessedIssue) -> IssueClassification:
     model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-    response = client.models.generate_content(
-        model=model,
-        contents=build_classifier_prompt(issue),
-        config={
-            "response_mime_type": "application/json",
-            "response_json_schema": IssueClassification.model_json_schema(),
-            "temperature": 0.1,
-        },
-    )
+    last_error: Exception | None = None
 
-    return IssueClassification.model_validate_json(response.text)
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=build_classifier_prompt(issue),
+                config={
+                    "response_mime_type": "application/json",
+                    "response_json_schema": IssueClassification.model_json_schema(),
+                    "temperature": 0.1,
+                },
+            )
+
+            return IssueClassification.model_validate_json(response.text)
+
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+
+    raise RuntimeError(f"Gemini classifier failed after retries: {last_error}")
 
 
 def classify_issue(issue: PreprocessedIssue) -> IssueClassification:
