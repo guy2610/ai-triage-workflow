@@ -1,0 +1,14 @@
+[
+  {
+    "title": "Upload crashes on large files",
+    "body": "The upload flow crashes when I try a 120MB file. Steps to reproduce: upload a large file. Expected: upload should complete. Actual: the client exits with an error."
+  },
+  {
+    "title": "Possible auth bypass vulnerability",
+    "body": "I found a security issue where a token might be reused after logout. Please review urgently."
+  },
+  {
+    "title": "App does not work",
+    "body": "It fails and I am blocked, but I do not have more details yet."
+  }
+]
