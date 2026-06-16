@@ -115,19 +115,16 @@ Preprocessing facts:
 def classify_issue_with_gemini(issue: PreprocessedIssue) -> IssueClassification:
     load_dotenv()
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-    client = genai.Client()
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
     response = client.models.generate_content(
         model=model,
         contents=build_classifier_prompt(issue),
         config={
-            "response_format": {
-                "text": {
-                    "mime_type": "application/json",
-                    "schema": IssueClassification.model_json_schema(),
-                }
-            }
+            "response_mime_type": "application/json",
+            "response_json_schema": IssueClassification.model_json_schema(),
+            "temperature": 0.1,
         },
     )
 
@@ -142,7 +139,7 @@ def classify_issue(issue: PreprocessedIssue) -> IssueClassification:
 
     try:
         return classify_issue_with_gemini(issue)
-    except (ValidationError, ValueError, RuntimeError) as exc:
+    except Exception as exc:
         print(f"agent_classifier_failed: {exc}")
         print("falling_back_to_mock_classifier")
         return classify_issue_mock(issue)
